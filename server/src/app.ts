@@ -1,3 +1,4 @@
+import { prisma } from './lib/prisma';
 import express, { Express, Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 
@@ -11,6 +12,15 @@ app.use(express.urlencoded({ extended: true }));
 // Routes
 app.get('/health', (req: Request, res: Response) => {
   res.json({ status: 'ok' });
+});
+app.get('/health/db', async (req: Request, res: Response) => {
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    res.json({ status: 'ok', database: 'connected' });
+  } catch (error) {
+    console.error('Database connection failed:', error);
+    res.status(500).json({ status: 'error', database: 'disconnected' });
+  }
 });
 
 // Basic 404 handler
