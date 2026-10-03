@@ -1,3 +1,4 @@
+import authRoutes from './routes/auth.routes';
 import { prisma } from './lib/prisma';
 import express, { Express, Request, Response, NextFunction } from 'express';
 import cors from 'cors';
@@ -22,7 +23,7 @@ app.get('/health/db', async (req: Request, res: Response) => {
     res.status(500).json({ status: 'error', database: 'disconnected' });
   }
 });
-
+app.use('/api/auth',authRoutes);
 // Basic 404 handler
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 app.use((req: Request, res: Response, next: NextFunction) => {
