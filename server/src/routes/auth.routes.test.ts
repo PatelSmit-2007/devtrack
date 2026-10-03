@@ -1,4 +1,5 @@
 import request from 'supertest';
+import jwt from 'jsonwebtoken';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import app from '../app';
 import { prisma } from '../lib/prisma';
@@ -112,5 +113,104 @@ describe('POST /api/auth/register', () => {
 
     expect(response.body.user.email).toBe('user@example.com');
     expect(response.body.user.name).toBe('Test User');
+  });
+});
+
+describe('POST /api/auth/login', () => {
+  const testUser = {
+    email: 'login@example.com',
+    password: 'LoginPassword123',
+    name: 'Login Test User',
+  };
+
+  beforeEach(async () => {
+    await prisma.user.deleteMany();
+    await request(app).post('/api/auth/register').send(testUser);
+  });
+
+
+  it('should login successfully with correct credentials', async () => {
+    const response = await request(app).post('/api/auth/login').send({
+      email: testUser.email,
+      password: testUser.password,
+    });
+
+    expect(response.status).toBe(200);
+    expect(typeof response.body.token).toBe('string');
+    expect(response.body.token.length).toBeGreaterThan(0);
+    expect(response.body.user).toEqual(
+      expect.objectContaining({
+        email: testUser.email,
+        name: testUser.name,
+      })
+    );
+    expect(response.body.user).toHaveProperty('id');
+    expect(response.body.user).not.toHaveProperty('passwordHash');
+  });
+
+  it('should return a valid JWT token with the correct subject', async () => {
+    const response = await request(app).post('/api/auth/login').send({
+      email: testUser.email,
+      password: testUser.password,
+    });
+
+    expect(response.status).toBe(200);
+
+    const token = response.body.token;
+    
+    const dbUser = await prisma.user.findUnique({
+      where: { email: testUser.email },
+    });
+
+    const decoded = jwt.verify(token, process.env.JWT_SECRET as string) as jwt.JwtPayload;
+
+    expect(decoded.sub).toBe(dbUser?.id);
+  });
+
+  it('should reject login with incorrect password', async () => {
+    const response = await request(app).post('/api/auth/login').send({
+      email: testUser.email,
+      password: 'WrongPassword123',
+    });
+
+    expect(response.status).toBe(401);
+    expect(response.body).toEqual({
+      error: 'Invalid email or password',
+    });
+  });
+
+  it('should reject login with unknown email', async () => {
+    const response = await request(app).post('/api/auth/login').send({
+      email: 'unknown@example.com',
+      password: testUser.password,
+    });
+
+    expect(response.status).toBe(401);
+    expect(response.body).toEqual({
+      error: 'Invalid email or password',
+    });
+  });
+
+  it('should reject invalid email format', async () => {
+    const response = await request(app).post('/api/auth/login').send({
+      email: 'not-an-email',
+      password: testUser.password,
+    });
+
+    expect(response.status).toBe(400);
+    expect(response.body).toEqual({
+      error: 'Invalid email format',
+    });
+  });
+
+  it('should reject missing credentials', async () => {
+    const response = await request(app).post('/api/auth/login').send({
+      email: testUser.email,
+    });
+
+    expect(response.status).toBe(400);
+    expect(response.body).toEqual({
+      error: 'Email and password are required',
+    });
   });
 });
