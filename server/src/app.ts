@@ -1,4 +1,5 @@
 import authRoutes from './routes/auth.routes';
+import projectRoutes from './routes/project.routes';
 import { prisma } from './lib/prisma';
 import express, { Express, Request, Response, NextFunction } from 'express';
 import cors from 'cors';
@@ -24,6 +25,8 @@ app.get('/health/db', async (req: Request, res: Response) => {
   }
 });
 app.use('/api/auth', authRoutes);
+app.use('/api/projects', projectRoutes);
+
 // Basic 404 handler
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 app.use((req: Request, res: Response, next: NextFunction) => {
