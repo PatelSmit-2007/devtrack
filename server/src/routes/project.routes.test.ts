@@ -159,4 +159,108 @@ describe('Project Routes', () => {
       });
     });
   });
+
+  describe('GET /', () => {
+    it('should return 401 without Authorization header', async () => {
+      const response = await request(app).get('/projects');
+      expect(response.status).toBe(401);
+      expect(response.body).toEqual({ error: 'Authentication required' });
+    });
+
+    it('should return 401 with invalid JWT', async () => {
+      const response = await request(app)
+        .get('/projects')
+        .set('Authorization', 'Bearer invalid-token');
+      expect(response.status).toBe(401);
+      expect(response.body).toEqual({ error: 'Invalid or expired token' });
+    });
+
+    it('should return an empty array if user has no projects', async () => {
+      await withAuthUser(async (userId, token) => {
+        const response = await request(app)
+          .get('/projects')
+          .set('Authorization', `Bearer ${token}`);
+        expect(response.status).toBe(200);
+        expect(response.body).toEqual([]);
+      });
+    });
+
+    it("should return user's own projects", async () => {
+      await withAuthUser(async (userId, token) => {
+        const project = await prisma.project.create({
+          data: {
+            name: 'My Project',
+            ownerId: userId,
+          },
+        });
+
+        const response = await request(app)
+          .get('/projects')
+          .set('Authorization', `Bearer ${token}`);
+        
+        expect(response.status).toBe(200);
+        expect(response.body).toHaveLength(1);
+        expect(response.body[0].id).toBe(project.id);
+        expect(response.body[0].name).toBe('My Project');
+      });
+    });
+
+    it('should NOT return projects belonging to another user', async () => {
+      await withAuthUser(async (userId, token) => {
+        await withAuthUser(async (otherUserId) => {
+          // Create project for other user
+          await prisma.project.create({
+            data: {
+              name: 'Other User Project',
+              ownerId: otherUserId,
+            },
+          });
+
+          // Create project for current user
+          await prisma.project.create({
+            data: {
+              name: 'My Project',
+              ownerId: userId,
+            },
+          });
+
+          const response = await request(app)
+            .get('/projects')
+            .set('Authorization', `Bearer ${token}`);
+          
+          expect(response.status).toBe(200);
+          expect(response.body).toHaveLength(1);
+          expect(response.body[0].name).toBe('My Project');
+          expect(response.body[0].ownerId).toBe(userId);
+        });
+      });
+    });
+
+    it('should return multiple projects if they belong to the user', async () => {
+      await withAuthUser(async (userId, token) => {
+        await prisma.project.create({
+          data: {
+            name: 'Project 1',
+            ownerId: userId,
+          },
+        });
+        await prisma.project.create({
+          data: {
+            name: 'Project 2',
+            ownerId: userId,
+          },
+        });
+
+        const response = await request(app)
+          .get('/projects')
+          .set('Authorization', `Bearer ${token}`);
+        
+        expect(response.status).toBe(200);
+        expect(response.body).toHaveLength(2);
+        const names = response.body.map((p: { name: string }) => p.name);
+        expect(names).toContain('Project 1');
+        expect(names).toContain('Project 2');
+      });
+    });
+  });
 });

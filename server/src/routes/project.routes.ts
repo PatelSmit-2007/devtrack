@@ -51,4 +51,24 @@ router.post('/', requireAuth, async (req: Request, res: Response): Promise<void>
   }
 });
 
+router.get('/', requireAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    if (!req.user) {
+      res.status(401).json({ error: 'Authentication required' });
+      return;
+    }
+
+    const projects = await prisma.project.findMany({
+      where: {
+        ownerId: req.user,
+      },
+    });
+
+    res.status(200).json(projects);
+  } catch (error) {
+    console.error('Error fetching projects:', error);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
 export default router;
