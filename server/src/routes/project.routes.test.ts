@@ -263,4 +263,70 @@ describe('Project Routes', () => {
       });
     });
   });
+
+  describe('GET /:id', () => {
+    it('should return 401 without Authorization header', async () => {
+      const response = await request(app).get('/projects/123');
+      expect(response.status).toBe(401);
+      expect(response.body).toEqual({ error: 'Authentication required' });
+    });
+
+    it('should return 401 with invalid JWT', async () => {
+      const response = await request(app)
+        .get('/projects/123')
+        .set('Authorization', 'Bearer invalid-token');
+      expect(response.status).toBe(401);
+      expect(response.body).toEqual({ error: 'Invalid or expired token' });
+    });
+
+    it('should return 404 for a non-existent project ID', async () => {
+      await withAuthUser(async (userId, token) => {
+        const response = await request(app)
+          .get('/projects/non-existent-id')
+          .set('Authorization', `Bearer ${token}`);
+        expect(response.status).toBe(404);
+        expect(response.body).toEqual({ error: 'Project not found' });
+      });
+    });
+
+    it('should return the project if authenticated user owns it', async () => {
+      await withAuthUser(async (userId, token) => {
+        const project = await prisma.project.create({
+          data: {
+            name: 'Specific Project',
+            ownerId: userId,
+          },
+        });
+
+        const response = await request(app)
+          .get(`/projects/${project.id}`)
+          .set('Authorization', `Bearer ${token}`);
+        
+        expect(response.status).toBe(200);
+        expect(response.body.id).toBe(project.id);
+        expect(response.body.name).toBe('Specific Project');
+        expect(response.body.ownerId).toBe(userId);
+      });
+    });
+
+    it('should return 404 if project belongs to another user', async () => {
+      await withAuthUser(async (userId, token) => {
+        await withAuthUser(async (otherUserId) => {
+          const otherProject = await prisma.project.create({
+            data: {
+              name: 'Other User Project',
+              ownerId: otherUserId,
+            },
+          });
+
+          const response = await request(app)
+            .get(`/projects/${otherProject.id}`)
+            .set('Authorization', `Bearer ${token}`);
+          
+          expect(response.status).toBe(404);
+          expect(response.body).toEqual({ error: 'Project not found' });
+        });
+      });
+    });
+  });
 });
